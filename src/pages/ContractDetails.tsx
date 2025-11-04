@@ -255,9 +255,9 @@ const ContractDetails = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {amendments.map((amendment) => (
+                  {amendments.map((amendment, index) => (
                     <div key={amendment.id} className="border-l-4 border-primary pl-4">
-                      <p className="font-medium text-foreground">{amendment.amendment_type}</p>
+                      <p className="font-medium text-foreground">{index + 1}º Aditivo - {amendment.amendment_type}</p>
                       {amendment.new_value && (
                         <p className="text-sm text-muted-foreground">
                           Novo Valor: {formatCurrency(amendment.new_value)}
@@ -288,9 +288,9 @@ const ContractDetails = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {endorsements.map((endorsement) => (
+                  {endorsements.map((endorsement, index) => (
                     <div key={endorsement.id} className="border-l-4 border-secondary pl-4">
-                      <p className="font-medium text-foreground">{endorsement.endorsement_type}</p>
+                      <p className="font-medium text-foreground">{index + 1}º Apostilamento - {endorsement.endorsement_type}</p>
                       {endorsement.description && (
                         <p className="text-sm text-muted-foreground mb-2">
                           {endorsement.description}

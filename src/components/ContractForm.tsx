@@ -35,10 +35,19 @@ const contractSchema = z.object({
 type ContractFormData = z.infer<typeof contractSchema>;
 
 interface Amendment {
-  amendment_type: 'Aditivo de Valor' | 'Aditivo de Prazo';
+  amendment_type: 'Aditivo de Valor' | 'Aditivo de Prazo' | 'Aditivo de Valor e Prazo';
   new_value?: string;
   new_end_date?: string;
   process_number: string;
+}
+
+interface Endorsement {
+  endorsement_type: 'Prorrogação de Prazo de Execução' | 'Reajuste por Índice' | 'Repactuação' | 'Alteração de Dotação Orçamentária';
+  new_value?: string;
+  new_execution_date?: string;
+  adjustment_index?: string;
+  process_number: string;
+  description?: string;
 }
 
 interface ContractFormProps {
@@ -55,8 +64,15 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
     amendment_type: 'Aditivo de Valor',
     process_number: '',
   });
+  const [endorsements, setEndorsements] = useState<Endorsement[]>([]);
+  const [showEndorsementForm, setShowEndorsementForm] = useState(false);
+  const [newEndorsement, setNewEndorsement] = useState<Endorsement>({
+    endorsement_type: 'Reajuste por Índice',
+    process_number: '',
+  });
   const [documents, setDocuments] = useState<ContractDocument[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadingDocType, setUploadingDocType] = useState<DocumentType | null>(null);
   const [supervisors, setSupervisors] = useState<ContractSupervisor[]>([]);
   const [showSupervisorForm, setShowSupervisorForm] = useState(false);
   const [newSupervisor, setNewSupervisor] = useState({
@@ -131,11 +147,11 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
       toast.error('Número do processo é obrigatório');
       return;
     }
-    if (newAmendment.amendment_type === 'Aditivo de Valor' && !newAmendment.new_value) {
+    if ((newAmendment.amendment_type === 'Aditivo de Valor' || newAmendment.amendment_type === 'Aditivo de Valor e Prazo') && !newAmendment.new_value) {
       toast.error('Novo valor é obrigatório para aditivo de valor');
       return;
     }
-    if (newAmendment.amendment_type === 'Aditivo de Prazo' && !newAmendment.new_end_date) {
+    if ((newAmendment.amendment_type === 'Aditivo de Prazo' || newAmendment.amendment_type === 'Aditivo de Valor e Prazo') && !newAmendment.new_end_date) {
       toast.error('Nova data de fim é obrigatória para aditivo de prazo');
       return;
     }
@@ -147,6 +163,26 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
     });
     setShowAmendmentForm(false);
     toast.success('Aditivo adicionado');
+  };
+
+  const handleAddEndorsement = () => {
+    if (!newEndorsement.process_number) {
+      toast.error('Número do processo é obrigatório');
+      return;
+    }
+    
+    setEndorsements([...endorsements, newEndorsement]);
+    setNewEndorsement({
+      endorsement_type: 'Reajuste por Índice',
+      process_number: '',
+    });
+    setShowEndorsementForm(false);
+    toast.success('Apostilamento adicionado');
+  };
+
+  const handleRemoveEndorsement = (index: number) => {
+    setEndorsements(endorsements.filter((_, i) => i !== index));
+    toast.success('Apostilamento removido');
   };
 
   const handleRemoveAmendment = (index: number) => {
@@ -263,6 +299,19 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
           });
         }
 
+        // Handle endorsements
+        for (const endorsement of endorsements) {
+          await supabase.from('contract_endorsements').insert({
+            contract_id: contract.id,
+            endorsement_type: endorsement.endorsement_type,
+            new_value: endorsement.new_value ? parseFloat(endorsement.new_value) : null,
+            new_execution_date: endorsement.new_execution_date || null,
+            adjustment_index: endorsement.adjustment_index || null,
+            process_number: endorsement.process_number,
+            description: endorsement.description || null,
+          });
+        }
+
         toast.success('Contrato atualizado com sucesso!');
       } else {
         // Create new contract
@@ -282,6 +331,19 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
             new_value: amendment.new_value ? parseFloat(amendment.new_value) : null,
             new_end_date: amendment.new_end_date || null,
             process_number: amendment.process_number,
+          });
+        }
+
+        // Handle endorsements
+        for (const endorsement of endorsements) {
+          await supabase.from('contract_endorsements').insert({
+            contract_id: newContract.id,
+            endorsement_type: endorsement.endorsement_type,
+            new_value: endorsement.new_value ? parseFloat(endorsement.new_value) : null,
+            new_execution_date: endorsement.new_execution_date || null,
+            adjustment_index: endorsement.adjustment_index || null,
+            process_number: endorsement.process_number,
+            description: endorsement.description || null,
           });
         }
 
@@ -314,10 +376,11 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <Tabs defaultValue="dados" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="dados">Dados Principais</TabsTrigger>
               <TabsTrigger value="gestao">Gestão</TabsTrigger>
               <TabsTrigger value="aditivos">Aditivos</TabsTrigger>
+              <TabsTrigger value="apostilamentos">Apostilamentos</TabsTrigger>
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
             </TabsList>
 
@@ -592,11 +655,12 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
                       <SelectContent>
                         <SelectItem value="Aditivo de Valor">Aditivo de Valor</SelectItem>
                         <SelectItem value="Aditivo de Prazo">Aditivo de Prazo</SelectItem>
+                        <SelectItem value="Aditivo de Valor e Prazo">Aditivo de Valor e Prazo</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {newAmendment.amendment_type === 'Aditivo de Valor' && (
+                  {(newAmendment.amendment_type === 'Aditivo de Valor' || newAmendment.amendment_type === 'Aditivo de Valor e Prazo') && (
                     <div className="space-y-2">
                       <Label>Novo Valor Total (R$)</Label>
                       <Input
@@ -610,7 +674,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
                     </div>
                   )}
 
-                  {newAmendment.amendment_type === 'Aditivo de Prazo' && (
+                  {(newAmendment.amendment_type === 'Aditivo de Prazo' || newAmendment.amendment_type === 'Aditivo de Valor e Prazo') && (
                     <div className="space-y-2">
                       <Label>Nova Data de Fim de Vigência</Label>
                       <Input
@@ -653,7 +717,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
                   {amendments.map((amendment, index) => (
                     <div key={index} className="border rounded-lg p-4 flex justify-between items-start">
                       <div>
-                        <p className="font-medium">{amendment.amendment_type}</p>
+                        <p className="font-medium">{index + 1}º Aditivo - {amendment.amendment_type}</p>
                         {amendment.new_value && (
                           <p className="text-sm text-muted-foreground">
                             Novo Valor: R$ {parseFloat(amendment.new_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -682,78 +746,250 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
               )}
             </TabsContent>
 
-            <TabsContent value="documentos" className="space-y-4 mt-4">
+            <TabsContent value="apostilamentos" className="space-y-4 mt-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-medium text-lg">Documentos do Contrato</h3>
+                <h3 className="font-medium text-lg">Apostilamentos do Contrato</h3>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                  disabled={uploading || !contract}
+                  onClick={() => setShowEndorsementForm(true)}
                 >
-                  <Upload className="mr-2 h-4 w-4" />
-                  {uploading ? 'Enviando...' : 'Adicionar Documento'}
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar Apostilamento
                 </Button>
-                <input
-                  id="file-upload"
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file || !contract) return;
+              </div>
 
-                    setUploading(true);
-                    try {
-                      const fileExt = file.name.split('.').pop();
-                      const fileName = `${contract.id}/${Date.now()}.${fileExt}`;
-                      
-                      const { error: uploadError } = await supabase.storage
-                        .from('contract-documents')
-                        .upload(fileName, file);
+              {showEndorsementForm && (
+                <div className="border rounded-lg p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Apostilamento</Label>
+                    <Select
+                      value={newEndorsement.endorsement_type}
+                      onValueChange={(value) =>
+                        setNewEndorsement({ ...newEndorsement, endorsement_type: value as any })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Reajuste por Índice">Reajuste por Índice</SelectItem>
+                        <SelectItem value="Repactuação">Repactuação</SelectItem>
+                        <SelectItem value="Prorrogação de Prazo de Execução">Prorrogação de Prazo de Execução</SelectItem>
+                        <SelectItem value="Alteração de Dotação Orçamentária">Alteração de Dotação Orçamentária</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                      if (uploadError) throw uploadError;
+                  {(newEndorsement.endorsement_type === 'Reajuste por Índice' || newEndorsement.endorsement_type === 'Repactuação') && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Novo Valor (R$)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={newEndorsement.new_value || ''}
+                          onChange={(e) =>
+                            setNewEndorsement({ ...newEndorsement, new_value: e.target.value })
+                          }
+                        />
+                      </div>
+                      {newEndorsement.endorsement_type === 'Reajuste por Índice' && (
+                        <div className="space-y-2">
+                          <Label>Índice de Reajuste</Label>
+                          <Input
+                            value={newEndorsement.adjustment_index || ''}
+                            onChange={(e) =>
+                              setNewEndorsement({ ...newEndorsement, adjustment_index: e.target.value })
+                            }
+                            placeholder="Ex: IPCA, INPC, IGP-M"
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
 
-                      const documentType = prompt(
-                        'Selecione o tipo de documento:\n1. Contrato\n2. Publicação no Diário Oficial\n3. Termo Aditivo\n4. Apostilamento\n5. Extrato de Publicação do Aditivo\n6. Portaria\n\nDigite o número:'
-                      );
+                  {newEndorsement.endorsement_type === 'Prorrogação de Prazo de Execução' && (
+                    <div className="space-y-2">
+                      <Label>Nova Data de Execução</Label>
+                      <Input
+                        type="date"
+                        value={newEndorsement.new_execution_date || ''}
+                        onChange={(e) =>
+                          setNewEndorsement({ ...newEndorsement, new_execution_date: e.target.value })
+                        }
+                      />
+                    </div>
+                  )}
 
-                      const typeMap: Record<string, DocumentType> = {
-                        '1': 'Contrato',
-                        '2': 'Extrato de Publicação do Contrato',
-                        '3': 'Termo Aditivo',
-                        '4': 'Extrato de Publicação do Aditivo',
-                        '5': 'Apostilamento',
-                        '6': 'Portaria',
-                      };
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Textarea
+                      value={newEndorsement.description || ''}
+                      onChange={(e) =>
+                        setNewEndorsement({ ...newEndorsement, description: e.target.value })
+                      }
+                      rows={2}
+                      placeholder="Descreva o motivo do apostilamento"
+                    />
+                  </div>
 
-                      const selectedType = typeMap[documentType || '1'];
+                  <div className="space-y-2">
+                    <Label>Número do Processo</Label>
+                    <Input
+                      value={newEndorsement.process_number}
+                      onChange={(e) =>
+                        setNewEndorsement({ ...newEndorsement, process_number: e.target.value })
+                      }
+                    />
+                  </div>
 
-                      const { data, error: dbError } = await supabase
-                        .from('contract_documents')
-                        .insert({
-                          contract_id: contract.id,
-                          document_type: selectedType,
-                          file_name: file.name,
-                          file_path: fileName,
-                          file_size: file.size,
-                        })
-                        .select()
-                        .single();
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={handleAddEndorsement}>
+                      Salvar Apostilamento
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowEndorsementForm(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-                      if (dbError) throw dbError;
+              {endorsements.length > 0 && (
+                <div className="space-y-2">
+                  {endorsements.map((endorsement, index) => (
+                    <div key={index} className="border rounded-lg p-4 flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">{index + 1}º Apostilamento - {endorsement.endorsement_type}</p>
+                        {endorsement.description && (
+                          <p className="text-sm text-muted-foreground mb-1">{endorsement.description}</p>
+                        )}
+                        {endorsement.new_value && (
+                          <p className="text-sm text-muted-foreground">
+                            Novo Valor: R$ {parseFloat(endorsement.new_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        )}
+                        {endorsement.adjustment_index && (
+                          <p className="text-sm text-muted-foreground">
+                            Índice: {endorsement.adjustment_index}
+                          </p>
+                        )}
+                        {endorsement.new_execution_date && (
+                          <p className="text-sm text-muted-foreground">
+                            Nova Data de Execução: {new Date(endorsement.new_execution_date).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          Processo: {endorsement.process_number}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveEndorsement(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
 
-                      setDocuments([...documents, data as ContractDocument]);
-                      toast.success('Documento enviado com sucesso!');
-                      e.target.value = '';
-                    } catch (error: any) {
-                      toast.error(error.message || 'Erro ao enviar documento');
-                    } finally {
-                      setUploading(false);
-                    }
-                  }}
-                />
+            <TabsContent value="documentos" className="space-y-4 mt-4">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-medium text-lg">Documentos do Contrato</h3>
+                </div>
+
+                {!contract && (
+                  <p className="text-sm text-muted-foreground">
+                    Salve o contrato primeiro para poder adicionar documentos.
+                  </p>
+                )}
+
+                {contract && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['Contrato', 'Extrato de Publicação do Contrato', 'Termo Aditivo', 'Extrato de Publicação do Aditivo', 'Apostilamento', 'Portaria'] as DocumentType[]).map((docType) => (
+                      <div key={docType}>
+                        <input
+                          id={`file-upload-${docType}`}
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !contract) return;
+
+                            setUploading(true);
+                            setUploadingDocType(docType);
+                            try {
+                              // Contar documentos existentes do mesmo tipo para numeração
+                              const { data: existingDocs } = await supabase
+                                .from('contract_documents')
+                                .select('document_number')
+                                .eq('contract_id', contract.id)
+                                .eq('document_type', docType);
+
+                              const docNumber = (existingDocs?.length || 0) + 1;
+                              const docNumberStr = docNumber > 1 ? `${docNumber}º` : '';
+
+                              const fileExt = file.name.split('.').pop();
+                              const fileName = `${contract.id}/${Date.now()}.${fileExt}`;
+                              
+                              const { error: uploadError } = await supabase.storage
+                                .from('contract-documents')
+                                .upload(fileName, file);
+
+                              if (uploadError) throw uploadError;
+
+                              const { data, error: dbError } = await supabase
+                                .from('contract_documents')
+                                .insert({
+                                  contract_id: contract.id,
+                                  document_type: docType,
+                                  file_name: file.name,
+                                  file_path: fileName,
+                                  file_size: file.size,
+                                  document_number: docNumberStr,
+                                })
+                                .select()
+                                .single();
+
+                              if (dbError) throw dbError;
+
+                              setDocuments([...documents, data as ContractDocument]);
+                              toast.success(`${docType} enviado com sucesso!`);
+                              e.target.value = '';
+                            } catch (error: any) {
+                              toast.error(error.message || 'Erro ao enviar documento');
+                            } finally {
+                              setUploading(false);
+                              setUploadingDocType(null);
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => document.getElementById(`file-upload-${docType}`)?.click()}
+                          disabled={uploading}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          {uploading && uploadingDocType === docType ? 'Enviando...' : docType}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {!contract && (
@@ -763,13 +999,16 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
               )}
 
               {documents.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2 mt-4">
+                  <h4 className="font-medium">Documentos Enviados</h4>
                   {documents.map((doc) => (
                     <div key={doc.id} className="border rounded-lg p-4 flex justify-between items-start">
                       <div className="flex items-start gap-3">
                         <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                         <div>
-                          <p className="font-medium">{doc.document_type}</p>
+                          <p className="font-medium">
+                            {doc.document_number && `${doc.document_number} `}{doc.document_type}
+                          </p>
                           <p className="text-sm text-muted-foreground">{doc.file_name}</p>
                           <p className="text-xs text-muted-foreground">
                             {(doc.file_size / 1024).toFixed(2)} KB • {new Date(doc.uploaded_at).toLocaleDateString('pt-BR')}
