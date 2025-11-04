@@ -13,7 +13,7 @@ export const AdminSidebar = () => {
   const handleLogout = async () => {
     await signOut();
     toast.success('Logout realizado com sucesso');
-    navigate('/auth');
+    navigate('/'); // Redireciona para a página pública
   };
 
   const links = [
