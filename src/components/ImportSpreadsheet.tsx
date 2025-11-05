@@ -57,7 +57,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
 
       const contracts = jsonData.map((row: any) => ({
         contract_number: row['Número do Contrato'] || row['numero_contrato'],
-        gms_number: row['Número GMS'] || row['gms_number'],
+        gms_number: row['Número GMS'] || row['gms_number'] || null, // Permitindo null
         modality: row['Modalidade'] || row['modality'],
         object: row['Objeto'] || row['object'],
         contracted_company: row['Empresa Contratada'] || row['contracted_company'],
@@ -97,8 +97,8 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
     const template = [
       {
         'Número do Contrato': '001/2024',
-        'Número GMS': 'GMS-2024-001',
-        'Modalidade': 'Pregão',
+        'Número GMS': 'GMS-2024-001 (Opcional)',
+        'Modalidade': 'Pregão, Dispensa, Inexigibilidade, Concorrência, Tomada de Preços, Credenciamento, Adesão',
         'Objeto': 'Descrição detalhada do objeto do contrato',
         'Empresa Contratada': 'Nome da Empresa Ltda',
         'Valor': '100000.00',
@@ -142,7 +142,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
                   <li>Use formatos de data: AAAA-MM-DD (ex: 2024-01-15)</li>
                   <li>Valores numéricos sem símbolos (ex: 100000.00)</li>
                   <li>Status: Vigente, Rescindido, Encerrado ou Prorrogado</li>
-                  <li>Modalidade: Pregão, Dispensa, Inexigibilidade, etc.</li>
+                  <li>Modalidade: Pregão, Dispensa, Inexigibilidade, Concorrência, Tomada de Preços, Credenciamento, Adesão</li>
                 </ul>
               </div>
             </div>

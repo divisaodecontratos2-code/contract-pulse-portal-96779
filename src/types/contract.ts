@@ -1,5 +1,5 @@
 export type ContractStatus = 'Vigente' | 'Rescindido' | 'Encerrado' | 'Prorrogado';
-export type Modality = 'Pregão' | 'Dispensa' | 'Inexigibilidade' | 'Concorrência' | 'Tomada de Preços';
+export type Modality = 'Pregão' | 'Dispensa' | 'Inexigibilidade' | 'Concorrência' | 'Tomada de Preços' | 'Credenciamento' | 'Adesão';
 export type AmendmentType = 'Aditivo de Valor' | 'Aditivo de Prazo' | 'Aditivo de Valor e Prazo';
 export type EndorsementType = 'Prorrogação de Prazo de Execução' | 'Reajuste por Índice' | 'Repactuação' | 'Alteração de Dotação Orçamentária';
 export type DocumentType = 'Contrato' | 'Extrato de Publicação do Contrato' | 'Termo Aditivo' | 'Extrato de Publicação do Aditivo' | 'Apostilamento' | 'Portaria';
@@ -7,7 +7,7 @@ export type DocumentType = 'Contrato' | 'Extrato de Publicação do Contrato' | 
 export interface Contract {
   id: string;
   contract_number: string;
-  gms_number: string;
+  gms_number?: string; // Tornando opcional
   modality: Modality;
   object: string;
   contracted_company: string;

@@ -17,8 +17,8 @@ import { Contract, ContractDocument, DocumentType, ContractSupervisor } from '@/
 
 const contractSchema = z.object({
   contract_number: z.string().min(1, 'Número do contrato obrigatório'),
-  gms_number: z.string().min(1, 'Número GMS obrigatório'),
-  modality: z.enum(['Pregão', 'Dispensa', 'Inexigibilidade', 'Concorrência', 'Tomada de Preços']),
+  gms_number: z.string().optional(), // Tornando opcional
+  modality: z.enum(['Pregão', 'Dispensa', 'Inexigibilidade', 'Concorrência', 'Tomada de Preços', 'Credenciamento', 'Adesão']),
   object: z.string().min(1, 'Objeto obrigatório'),
   contracted_company: z.string().min(1, 'Empresa contratada obrigatória'),
   contract_value: z.string().min(1, 'Valor obrigatório'),
@@ -87,6 +87,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
       ...contract,
       contract_value: contract.contract_value.toString(),
       manager_email: contract.manager_email || '',
+      gms_number: contract.gms_number || '', // Garantir que o campo opcional seja tratado
     } : {
       status: 'Vigente',
       has_extension_clause: false,
@@ -195,6 +196,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
           ...contract,
           contract_value: contract.contract_value.toString(),
           manager_email: contract.manager_email || '',
+          gms_number: contract.gms_number || '',
         });
         loadRelatedData();
         loadDocuments();
@@ -347,7 +349,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
     try {
       const contractData: any = {
         contract_number: data.contract_number,
-        gms_number: data.gms_number,
+        gms_number: data.gms_number || null, // Envia null se estiver vazio
         modality: data.modality,
         object: data.object,
         contracted_company: data.contracted_company,
@@ -387,48 +389,11 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
         toast.success('Contrato criado com sucesso!');
       }
 
-      // Handle amendments (only insert new ones, assuming existing ones were loaded/kept)
+      // Handle amendments
       if (currentContractId) {
-        // For simplicity and to avoid complex diffing, we assume amendments/endorsements/supervisors
-        // added in the form are new and should be inserted. If editing, the form loads existing ones
-        // and the user can only remove them (handled by handleRemoveAmendment/Endorsement/Supervisor).
-        // We only insert the ones currently in the local state if they don't have an ID (meaning they were added locally).
-        
-        // Note: Since the current implementation of amendments/endorsements uses local state (Amendment/Endorsement interfaces)
-        // which don't track database IDs, we need to adjust the logic slightly for editing.
-        // Since the user reported data loss on logout, it seems the intent is to save all related data upon contract save/update.
-        // For existing contracts, we assume the related data was loaded from DB. For new contracts, we insert everything.
-        
-        // To simplify, we will only insert the items that were added *during* this form session if it's a new contract.
-        // For existing contracts, we rely on the initial load and the separate delete functions.
-        
-        // Since the current implementation of `loadRelatedData` only loads existing data into local state, 
-        // and `onSubmit` iterates over the *current* local state (`amendments`, `endorsements`), 
-        // this means that if we are updating an existing contract, we are trying to re-insert existing data, which will fail 
-        // unless we clear the local state after successful insertion/update.
-        
-        // Given the current structure, I will assume the user wants to save the locally added amendments/endorsements 
-        // only if they are creating a NEW contract, or if they are editing, they are adding NEW ones.
-        // Since the current implementation doesn't track which local items are already in the DB, 
-        // I will modify the logic to only insert items that were added locally (i.e., don't have a DB ID).
-        // Since the local interfaces don't have an ID field, I'll assume the current implementation intends to insert all items 
-        // in the local state upon submission, which is only safe for NEW contracts.
-        
-        // Let's stick to the original logic for now, assuming the user is only adding new related items during the form session.
-        // If `contract` exists, we assume related data was already handled/exists in DB.
-        // If `contract` is new, we insert everything.
-        
-        // Since the user reported data loss, they likely expect the local state to be saved.
-        // I will modify the `loadRelatedData` to use the actual DB types which include `id` to prevent re-insertion on update.
-        // However, since the local interfaces (`Amendment`, `Endorsement`) don't match the DB types, I'll keep the current approach 
-        // but ensure that the local state is only processed if it's a NEW contract, or if the user explicitly added them during this session.
-        
-        // Reverting to the original logic for amendments/endorsements insertion, as it seems intended for new additions:
         
         // Handle amendments
         for (const amendment of amendments) {
-          // Check if this amendment was just added locally (no ID tracking, so we assume all are new if contract is new)
-          // If contract exists, we assume the user only added new ones to the local state during this session.
           await supabase.from('contract_amendments').insert({
             contract_id: currentContractId,
             amendment_type: amendment.amendment_type,
@@ -452,7 +417,6 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
         }
 
         // Handle supervisors (fiscais) - only insert those without a DB ID if it's a new contract
-        // If contract exists, supervisors are handled by separate add/remove functions that interact directly with DB.
         if (!contract) {
           for (const supervisor of supervisors) {
             await supabase.from('contract_supervisors').insert({
@@ -500,7 +464,7 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="gms_number">Número GMS *</Label>
+                  <Label htmlFor="gms_number">Número GMS (Opcional)</Label>
                   <Input id="gms_number" {...register('gms_number')} />
                   {errors.gms_number && (
                     <p className="text-sm text-destructive">{errors.gms_number.message}</p>
@@ -521,6 +485,8 @@ export const ContractForm = ({ open, onOpenChange, contract, onSuccess }: Contra
                       <SelectItem value="Inexigibilidade">Inexigibilidade</SelectItem>
                       <SelectItem value="Concorrência">Concorrência</SelectItem>
                       <SelectItem value="Tomada de Preços">Tomada de Preços</SelectItem>
+                      <SelectItem value="Credenciamento">Credenciamento</SelectItem>
+                      <SelectItem value="Adesão">Adesão</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

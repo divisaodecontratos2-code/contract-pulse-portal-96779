@@ -77,6 +77,8 @@ export const ContractFilters = ({ onApplyFilters }: ContractFiltersProps) => {
                 <SelectItem value="Inexigibilidade">Inexigibilidade</SelectItem>
                 <SelectItem value="Concorrência">Concorrência</SelectItem>
                 <SelectItem value="Tomada de Preços">Tomada de Preços</SelectItem>
+                <SelectItem value="Credenciamento">Credenciamento</SelectItem>
+                <SelectItem value="Adesão">Adesão</SelectItem>
               </SelectContent>
             </Select>
           </div>
