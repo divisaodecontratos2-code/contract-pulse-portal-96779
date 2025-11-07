@@ -192,7 +192,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           end_date: string
-          gms_number: string
+          gms_number: string | null // Alterado para aceitar NULL
           has_extension_clause: boolean | null
           id: string
           manager_email: string | null
@@ -212,7 +212,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           end_date: string
-          gms_number: string
+          gms_number?: string | null // Alterado para aceitar NULL
           has_extension_clause?: boolean | null
           id?: string
           manager_email?: string | null
@@ -232,7 +232,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           end_date?: string
-          gms_number?: string
+          gms_number?: string | null // Alterado para aceitar NULL
           has_extension_clause?: boolean | null
           id?: string
           manager_email?: string | null
@@ -296,6 +296,8 @@ export type Database = {
         | "Inexigibilidade"
         | "Concorrência"
         | "Tomada de Preços"
+        | "Credenciamento" // Adicionado
+        | "Adesão" // Adicionado
       nomination_type: "Cláusula Contratual" | "Portaria"
     }
     CompositeTypes: {
@@ -443,6 +445,8 @@ export const Constants = {
         "Inexigibilidade",
         "Concorrência",
         "Tomada de Preços",
+        "Credenciamento",
+        "Adesão",
       ],
       nomination_type: ["Cláusula Contratual", "Portaria"],
     },
