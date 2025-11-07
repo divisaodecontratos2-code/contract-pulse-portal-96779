@@ -72,8 +72,17 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
 
       const contractsToInsert = [];
       const supervisorsToInsert = [];
+      let skippedRows = 0;
 
       for (const row of jsonData) {
+        const contract_number_raw = row['Número do Contrato'] || row['numero_contrato'];
+        
+        // 1. Validação de campo obrigatório
+        if (!contract_number_raw || String(contract_number_raw).trim() === '') {
+          skippedRows++;
+          continue; // Pula linhas sem número de contrato
+        }
+
         const contract_value_raw = String(row['Valor'] || row['contract_value'] || '0').replace(/[^\d.,]/g, '').replace(',', '.');
         const contract_value = isNaN(parseFloat(contract_value_raw)) ? 0 : parseFloat(contract_value_raw);
 
@@ -85,7 +94,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
         const statusValue = findMatchingEnumValue(String(statusValueRaw), validStatuses);
 
         const contractData = {
-          contract_number: row['Número do Contrato'] || row['numero_contrato'],
+          contract_number: String(contract_number_raw), // Garante que é uma string
           gms_number: row['Número GMS'] || row['gms_number'] || null,
           modality: modalityValue || 'Pregão', // Fallback se não encontrar correspondência
           object: row['Objeto'] || row['object'],
@@ -98,8 +107,15 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
           has_extension_clause: row['Possui Prorrogação'] === 'Sim' || row['has_extension_clause'] === true,
           manager_name: row['Nome Gestor'] || row['manager_name'] || null,
           manager_email: row['Email Gestor'] || row['manager_email'] || null,
-          manager_nomination: row['Nomeação Gestor'] || row['manager_nomination'] || null,
+          manager_nomination: row['Nomeação Gestor'] || row['nomination_gestor'] || null,
         };
+        
+        // 2. Validação de outros campos obrigatórios (para evitar erros futuros)
+        if (!contractData.object || !contractData.process_number || !contractData.start_date || !contractData.end_date || !contractData.contracted_company) {
+            skippedRows++;
+            continue;
+        }
+        
         contractsToInsert.push(contractData);
 
         if (row['Nome Fiscal'] || row['supervisor_name']) {
@@ -110,6 +126,11 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
             original_contract_number: contractData.contract_number,
           });
         }
+      }
+      
+      if (contractsToInsert.length === 0) {
+        toast.error('Nenhum contrato válido encontrado para importação.');
+        return;
       }
 
       const { data: insertedContracts, error: contractsError } = await supabase
@@ -143,7 +164,12 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
         }
       }
 
-      toast.success(`${contractsToInsert.length} contrato(s) importado(s) com sucesso!`);
+      let successMessage = `${contractsToInsert.length} contrato(s) importado(s) com sucesso!`;
+      if (skippedRows > 0) {
+        successMessage += ` (${skippedRows} linha(s) ignorada(s) por falta de dados obrigatórios.)`;
+      }
+      
+      toast.success(successMessage);
       onSuccess();
       onOpenChange(false);
       setFile(null);
