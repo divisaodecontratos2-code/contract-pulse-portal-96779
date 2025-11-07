@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { Constants } from '@/integrations/supabase/types'; // Importar constantes para enums
+import { Constants } from '@/integrations/supabase/types';
+import { toTitleCase } from '@/lib/utils';
 
 interface ImportSpreadsheetProps {
   open: boolean;
@@ -61,11 +62,15 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
       const supervisorsToInsert = [];
 
       for (const row of jsonData) {
-        const contract_value_raw = String(row['Valor'] || row['contract_value']).replace(/[^\d.,]/g, '').replace(',', '.');
+        const contract_value_raw = String(row['Valor'] || row['contract_value'] || '0').replace(/[^\d.,]/g, '').replace(',', '.');
         const contract_value = isNaN(parseFloat(contract_value_raw)) ? 0 : parseFloat(contract_value_raw);
 
-        const modalityValue = row['Modalidade'] || row['modality'];
-        const statusValue = row['Status'] || row['status'];
+        // Normaliza os valores de enum para garantir correspondência exata
+        const modalityValueRaw = row['Modalidade'] || row['modality'];
+        const statusValueRaw = row['Status'] || row['status'];
+        
+        const modalityValue = modalityValueRaw ? toTitleCase(String(modalityValueRaw)) : '';
+        const statusValue = statusValueRaw ? toTitleCase(String(statusValueRaw)) : '';
 
         const contractData = {
           contract_number: row['Número do Contrato'] || row['numero_contrato'],
@@ -188,8 +193,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
                   <li>Valores numéricos sem símbolos (ex: 100000.00)</li>
                   <li>Status: Vigente, Rescindido, Encerrado ou Prorrogado</li>
                   <li>Modalidade: Pregão, Dispensa, Inexigibilidade, Concorrência, Tomada de Preços, Credenciamento, Adesão</li>
-                  <li>**Importante**: Verifique se a coluna 'Número GMS' no seu banco de dados Supabase aceita valores nulos.</li>
-                  <li>**Importante**: Verifique se o enum 'modality' no seu banco de dados Supabase inclui 'Credenciamento' e 'Adesão'.</li>
+                  <li>**Importante**: A coluna 'Número GMS' agora aceita valores nulos.</li>
                 </ul>
               </div>
             </div>
