@@ -44,6 +44,18 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
     return '';
   };
 
+  // Função auxiliar para encontrar o valor exato do enum, ignorando a capitalização da entrada
+  const findMatchingEnumValue = (inputValue: string, validEnums: readonly string[]): string | undefined => {
+    if (!inputValue) return undefined;
+    const normalizedInput = inputValue.trim().toLowerCase();
+    
+    // Tenta encontrar uma correspondência exata (case-insensitive)
+    const match = validEnums.find(enumValue => enumValue.toLowerCase() === normalizedInput);
+    
+    // Se encontrar, retorna o valor com a capitalização correta do enum
+    return match;
+  };
+
   const handleImport = async () => {
     if (!file) {
       toast.error('Selecione um arquivo');
@@ -65,23 +77,23 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
         const contract_value_raw = String(row['Valor'] || row['contract_value'] || '0').replace(/[^\d.,]/g, '').replace(',', '.');
         const contract_value = isNaN(parseFloat(contract_value_raw)) ? 0 : parseFloat(contract_value_raw);
 
-        // Normaliza os valores de enum para garantir correspondência exata
+        // Normaliza os valores de enum usando a nova função de correspondência
         const modalityValueRaw = row['Modalidade'] || row['modality'];
         const statusValueRaw = row['Status'] || row['status'];
         
-        const modalityValue = modalityValueRaw ? toTitleCase(String(modalityValueRaw)) : '';
-        const statusValue = statusValueRaw ? toTitleCase(String(statusValueRaw)) : '';
+        const modalityValue = findMatchingEnumValue(String(modalityValueRaw), validModalities);
+        const statusValue = findMatchingEnumValue(String(statusValueRaw), validStatuses);
 
         const contractData = {
           contract_number: row['Número do Contrato'] || row['numero_contrato'],
           gms_number: row['Número GMS'] || row['gms_number'] || null,
-          modality: validModalities.includes(modalityValue) ? modalityValue : 'Pregão', // Fallback
+          modality: modalityValue || 'Pregão', // Fallback se não encontrar correspondência
           object: row['Objeto'] || row['object'],
           contracted_company: row['Empresa Contratada'] || row['contracted_company'],
           contract_value: contract_value,
           start_date: parseExcelDate(row['Data Início'] || row['start_date']),
           end_date: parseExcelDate(row['Data Fim'] || row['end_date']),
-          status: validStatuses.includes(statusValue) ? statusValue : 'Vigente', // Fallback
+          status: statusValue || 'Vigente', // Fallback se não encontrar correspondência
           process_number: row['Número Processo'] || row['process_number'],
           has_extension_clause: row['Possui Prorrogação'] === 'Sim' || row['has_extension_clause'] === true,
           manager_name: row['Nome Gestor'] || row['manager_name'] || null,
