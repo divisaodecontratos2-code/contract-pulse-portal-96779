@@ -38,7 +38,7 @@ const AdminContracts = () => {
       const { data, error } = await supabase
         .from('contracts')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('end_date', { ascending: true }); // Ordena do mais próximo ao mais distante
 
       if (error) throw error;
       setContracts(data || []);

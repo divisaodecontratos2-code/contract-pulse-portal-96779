@@ -18,11 +18,13 @@ const Contracts = () => {
   }, []);
 
   const fetchContracts = async () => {
+    setLoading(true);
     try {
+      // Buscamos todos os contratos e ordenamos pela data de fim de vigência (end_date)
       const { data, error } = await supabase
         .from('contracts')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('end_date', { ascending: true }); // Ordena do mais próximo ao mais distante
 
       if (error) throw error;
       setContracts(data || []);
