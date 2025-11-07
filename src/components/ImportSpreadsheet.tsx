@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { Constants } from '@/integrations/supabase/types'; // Importar constantes para enums
 
 interface ImportSpreadsheetProps {
   open: boolean;
@@ -16,6 +17,9 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
 
+  const validModalities = Constants.public.Enums.modality;
+  const validStatuses = Constants.public.Enums.contract_status;
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
@@ -24,7 +28,6 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
 
   const parseExcelDate = (excelDate: any): string => {
     if (typeof excelDate === 'string') {
-      // Se já é uma string, tentar converter para formato ISO
       const date = new Date(excelDate);
       if (!isNaN(date.getTime())) {
         return date.toISOString().split('T')[0];
@@ -33,7 +36,6 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
     }
     
     if (typeof excelDate === 'number') {
-      // Excel usa dias desde 1900-01-01
       const date = new Date((excelDate - 25569) * 86400 * 1000);
       return date.toISOString().split('T')[0];
     }
@@ -55,33 +57,76 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      const contracts = jsonData.map((row: any) => ({
-        contract_number: row['Número do Contrato'] || row['numero_contrato'],
-        gms_number: row['Número GMS'] || row['gms_number'] || null, // Permitindo null
-        modality: row['Modalidade'] || row['modality'],
-        object: row['Objeto'] || row['object'],
-        contracted_company: row['Empresa Contratada'] || row['contracted_company'],
-        contract_value: parseFloat(String(row['Valor'] || row['contract_value']).replace(/[^\d.,]/g, '').replace(',', '.')),
-        start_date: parseExcelDate(row['Data Início'] || row['start_date']),
-        end_date: parseExcelDate(row['Data Fim'] || row['end_date']),
-        status: row['Status'] || row['status'] || 'Vigente',
-        process_number: row['Número Processo'] || row['process_number'],
-        has_extension_clause: row['Possui Prorrogação'] === 'Sim' || row['has_extension_clause'] === true,
-        manager_name: row['Nome Gestor'] || row['manager_name'] || null,
-        manager_email: row['Email Gestor'] || row['manager_email'] || null,
-        manager_nomination: row['Nomeação Gestor'] || row['manager_nomination'] || null,
-        supervisor_name: row['Nome Fiscal'] || row['supervisor_name'] || null,
-        supervisor_email: row['Email Fiscal'] || row['supervisor_email'] || null,
-        supervisor_nomination: row['Nomeação Fiscal'] || row['supervisor_nomination'] || null,
-      }));
+      const contractsToInsert = [];
+      const supervisorsToInsert = [];
 
-      const { error } = await supabase
+      for (const row of jsonData) {
+        const contract_value_raw = String(row['Valor'] || row['contract_value']).replace(/[^\d.,]/g, '').replace(',', '.');
+        const contract_value = isNaN(parseFloat(contract_value_raw)) ? 0 : parseFloat(contract_value_raw);
+
+        const modalityValue = row['Modalidade'] || row['modality'];
+        const statusValue = row['Status'] || row['status'];
+
+        const contractData = {
+          contract_number: row['Número do Contrato'] || row['numero_contrato'],
+          gms_number: row['Número GMS'] || row['gms_number'] || null,
+          modality: validModalities.includes(modalityValue) ? modalityValue : 'Pregão', // Fallback
+          object: row['Objeto'] || row['object'],
+          contracted_company: row['Empresa Contratada'] || row['contracted_company'],
+          contract_value: contract_value,
+          start_date: parseExcelDate(row['Data Início'] || row['start_date']),
+          end_date: parseExcelDate(row['Data Fim'] || row['end_date']),
+          status: validStatuses.includes(statusValue) ? statusValue : 'Vigente', // Fallback
+          process_number: row['Número Processo'] || row['process_number'],
+          has_extension_clause: row['Possui Prorrogação'] === 'Sim' || row['has_extension_clause'] === true,
+          manager_name: row['Nome Gestor'] || row['manager_name'] || null,
+          manager_email: row['Email Gestor'] || row['manager_email'] || null,
+          manager_nomination: row['Nomeação Gestor'] || row['manager_nomination'] || null,
+        };
+        contractsToInsert.push(contractData);
+
+        if (row['Nome Fiscal'] || row['supervisor_name']) {
+          supervisorsToInsert.push({
+            supervisor_name: row['Nome Fiscal'] || row['supervisor_name'],
+            supervisor_email: row['Email Fiscal'] || row['supervisor_email'] || null,
+            supervisor_nomination: row['Nomeação Fiscal'] || row['supervisor_nomination'] || null,
+            original_contract_number: contractData.contract_number,
+          });
+        }
+      }
+
+      const { data: insertedContracts, error: contractsError } = await supabase
         .from('contracts')
-        .insert(contracts);
+        .insert(contractsToInsert)
+        .select('id, contract_number');
 
-      if (error) throw error;
+      if (contractsError) throw contractsError;
 
-      toast.success(`${contracts.length} contrato(s) importado(s) com sucesso!`);
+      if (insertedContracts && supervisorsToInsert.length > 0) {
+        const supervisorsWithContractId = supervisorsToInsert.map(tempSupervisor => {
+          const correspondingContract = insertedContracts.find(
+            ic => ic.contract_number === tempSupervisor.original_contract_number
+          );
+          if (correspondingContract) {
+            return {
+              contract_id: correspondingContract.id,
+              supervisor_name: tempSupervisor.supervisor_name,
+              supervisor_email: tempSupervisor.supervisor_email,
+              supervisor_nomination: tempSupervisor.supervisor_nomination,
+            };
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (supervisorsWithContractId.length > 0) {
+          const { error: supervisorsError } = await supabase
+            .from('contract_supervisors')
+            .insert(supervisorsWithContractId);
+          if (supervisorsError) throw supervisorsError;
+        }
+      }
+
+      toast.success(`${contractsToInsert.length} contrato(s) importado(s) com sucesso!`);
       onSuccess();
       onOpenChange(false);
       setFile(null);
@@ -104,9 +149,9 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
         'Valor': '100000.00',
         'Data Início': '2024-01-15',
         'Data Fim': '2024-12-31',
-        'Status': 'Vigente',
+        'Status': 'Vigente, Rescindido, Encerrado, Prorrogado',
         'Número Processo': '23456.789/2023-10',
-        'Possui Prorrogação': 'Sim',
+        'Possui Prorrogação': 'Sim ou Não',
         'Nome Gestor': 'Nome do Gestor',
         'Email Gestor': 'gestor@uenp.edu.br',
         'Nomeação Gestor': 'Portaria',
@@ -143,6 +188,8 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
                   <li>Valores numéricos sem símbolos (ex: 100000.00)</li>
                   <li>Status: Vigente, Rescindido, Encerrado ou Prorrogado</li>
                   <li>Modalidade: Pregão, Dispensa, Inexigibilidade, Concorrência, Tomada de Preços, Credenciamento, Adesão</li>
+                  <li>**Importante**: Verifique se a coluna 'Número GMS' no seu banco de dados Supabase aceita valores nulos.</li>
+                  <li>**Importante**: Verifique se o enum 'modality' no seu banco de dados Supabase inclui 'Credenciamento' e 'Adesão'.</li>
                 </ul>
               </div>
             </div>
