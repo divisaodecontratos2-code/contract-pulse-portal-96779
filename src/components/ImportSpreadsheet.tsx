@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { Constants } from '@/integrations/supabase/types';
 import { toTitleCase } from '@/lib/utils';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 interface ImportSpreadsheetProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface ImportSpreadsheetProps {
 export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSpreadsheetProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const validModalities = Constants.public.Enums.modality;
   const validStatuses = Constants.public.Enums.contract_status;
@@ -54,6 +56,28 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
     
     // Se encontrar, retorna o valor com a capitalização correta do enum
     return match;
+  };
+
+  const handleClearContracts = async () => {
+    setDeleting(true);
+    try {
+      // Deletar todos os contratos. Devido às chaves estrangeiras ON DELETE CASCADE,
+      // isso também deve limpar aditivos, apostilamentos, documentos e fiscais.
+      const { error } = await supabase
+        .from('contracts')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Deleta todos, usando uma condição que é sempre verdadeira para evitar erro de RLS se a tabela estiver vazia
+
+      if (error) throw error;
+
+      toast.success('Todos os contratos foram excluídos com sucesso.');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Erro ao limpar contratos:', error);
+      toast.error('Erro ao limpar contratos. Verifique as permissões de administrador.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleImport = async () => {
@@ -107,7 +131,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
           has_extension_clause: row['Possui Prorrogação'] === 'Sim' || row['has_extension_clause'] === true,
           manager_name: row['Nome Gestor'] || row['manager_name'] || null,
           manager_email: row['Email Gestor'] || row['manager_email'] || null,
-          manager_nomination: row['Nomeação Gestor'] || row['nomination_gestor'] || null,
+          manager_nomination: row['Nomeação Gestor'] || row['manager_nomination'] || null,
         };
         
         // 2. Validação de outros campos obrigatórios (para evitar erros futuros)
@@ -175,7 +199,12 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
       setFile(null);
     } catch (error: any) {
       console.error('Erro ao importar:', error);
-      toast.error(`Erro ao importar: ${error.message}`);
+      // Verifica se o erro é de duplicidade
+      if (error.code === '23505') {
+        toast.error('Erro de importação: Contrato(s) com número duplicado já existe(m) no sistema.');
+      } else {
+        toast.error(`Erro ao importar: ${error.message}`);
+      }
     } finally {
       setImporting(false);
     }
@@ -237,14 +266,39 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={downloadTemplate}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Baixar Template Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={downloadTemplate}
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Baixar Template Excel
+            </Button>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="flex-1" disabled={deleting}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {deleting ? 'Limpando...' : 'Limpar Contratos'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação irá **excluir permanentemente TODOS os contratos** e seus dados relacionados (aditivos, fiscais, documentos) do sistema. Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClearContracts} disabled={deleting}>
+                    {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
 
           <div className="border-2 border-dashed rounded-lg p-8 text-center">
             <input
@@ -279,7 +333,7 @@ export const ImportSpreadsheet = ({ open, onOpenChange, onSuccess }: ImportSprea
             <Button
               className="flex-1"
               onClick={handleImport}
-              disabled={!file || importing}
+              disabled={!file || importing || deleting}
             >
               {importing ? 'Importando...' : 'Importar'}
             </Button>
